@@ -53,10 +53,12 @@ export default function Customer() {
   };
   const order = async () => {
     if (!addr.trim()) return toast('Isi alamat pengiriman', 'err');
-    if (pay !== 'COD' && !proof) return toast('Upload bukti pembayaran sebelum memesan', 'err');
+    const requiresProof = pay !== 'COD';
+    if (requiresProof && !proof) return toast('Upload bukti pembayaran sebelum memesan', 'err');
     setBusy(true); let proofUrl = null;
-    if (pay !== 'COD' && proof) { setUploadingProof(true); proofUrl = await uploadImage(proof, 'payment-proofs'); setUploadingProof(false); if (!proofUrl) { setBusy(false); return; } }
-    const { error } = await sb.rpc('place_order', { p_items: items.map(m => ({ id: m.id, qty: cart[m.id] })), p_address: addr.trim(), p_distance: km, p_payment: pay, p_proof: proofUrl, p_lat: loc ? loc.lat : null, p_lng: loc ? loc.lng : null }); setBusy(false);
+    // COD tidak pernah mengunggah atau mengirim bukti pembayaran.
+    if (requiresProof) { setUploadingProof(true); proofUrl = await uploadImage(proof, `payment-proofs/${me.id}`); setUploadingProof(false); if (!proofUrl) { setBusy(false); return; } }
+    const { error } = await sb.rpc('place_order', { p_items: items.map(m => ({ id: m.id, qty: cart[m.id] })), p_address: addr.trim(), p_distance: km, p_payment: pay, p_proof: requiresProof ? proofUrl : null, p_lat: loc ? loc.lat : null, p_lng: loc ? loc.lng : null }); setBusy(false);
     if (error) return toast(error.message, 'err'); setCart({}); toast('Pesanan dibuat! Menunggu konfirmasi admin'); setTab('orders'); setOt('active'); load();
   };
   const shown = (orders || []).filter(o => ot === 'active' ? isActive(o) : !isActive(o));
