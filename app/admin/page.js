@@ -1,7 +1,7 @@
 'use client';
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { sb, rp, toast, uploadImage, STATUS, PAYLABEL, isActive, useGuard, useOrders, useList, useSettings, useProfiles } from '../../lib/sb';
+import { sb, rp, toast, uploadImage, STATUS, PAYLABEL, isActive, useGuard, useOrders, useList, useSettings, useProfiles, useStore, getPos, hasPt } from '../../lib/sb';
 import { Icon, Sheet, Empty, ProfileView, Avatar } from '../../lib/ui';
 import { makePdf, receiptPdf } from '../../lib/pdf';
 
@@ -18,7 +18,7 @@ const PNAME = { day: 'Hari ini', week: 'Minggu ini', month: 'Bulan ini' };
 
 export default function Admin() {
   const { me, reload } = useGuard('admin'); const { orders, act } = useOrders(me); const r = useRouter();
-  const [menu, loadMenu] = useList('menu_items', 'name', me); const [cats, loadCats] = useList('categories', 'sort', me); const [banners, loadBan] = useList('banners', 'sort', me); const [st, loadSt] = useSettings(me);
+  const [menu, loadMenu] = useList('menu_items', 'name', me); const [cats, loadCats] = useList('categories', 'sort', me); const [banners, loadBan] = useList('banners', 'sort', me); const [st, loadSt] = useSettings(me); const [store, loadStore] = useStore(me); const [sto, setSto] = useState(null);
   const [tab, setTab] = useState('dash'); const [per, setPer] = useState('day'); const [of, setOf] = useState('all'); const [form, setForm] = useState(null); const [catName, setCatName] = useState(''); const [bform, setBform] = useState(null); const [ship, setShip] = useState(null); const [busy, setBusy] = useState(false);
   const pf = useProfiles((orders || []).flatMap(o => [o.customer_id, o.driver_id]));
   const ok = (orders || []).filter(o => o.status !== 'CANCELLED'), done = ok.filter(o => o.status === 'DELIVERED');
@@ -46,9 +46,12 @@ export default function Admin() {
   const addCat = async () => { if (!catName.trim()) return; const { error } = await sb.from('categories').insert({ name: catName.trim(), sort: (cats?.length || 0) + 1 }); error ? toast(error.message, 'err') : (setCatName(''), toast('Kategori dibuat'), loadCats()) };
   const saveShip = async () => { const s = ship; const { error } = await sb.from('settings').upsert([{ key: 'ship_base', value: +s.ship_base }, { key: 'ship_per_km', value: +s.ship_per_km }, { key: 'service_fee', value: +s.service_fee }]); error ? toast(error.message, 'err') : (toast('Pengaturan ongkir disimpan'), loadSt(), setShip(null)) };
   const saveBan = async () => { if (!bform.title?.trim()) return toast('Judul banner wajib diisi', 'err'); const { error } = await sb.from('banners').insert({ title: bform.title, subtitle: bform.subtitle || '', image_url: bform.image_url || null, sort: (banners?.length || 0) + 1 }); error ? toast(error.message, 'err') : (toast('Banner ditambahkan'), setBform(null), loadBan()) };
+  const sv = sto || { name: store?.name || '', address: store?.address || '', lat: store?.lat ?? '', lng: store?.lng ?? '' };
+  const saveStore = async () => { if (sv.lat === '' || sv.lng === '' || isNaN(+sv.lat) || isNaN(+sv.lng) || Math.abs(+sv.lat) > 90 || Math.abs(+sv.lng) > 180) return toast('Isi koordinat toko yang valid (latitude & longitude)', 'err'); const { error } = await sb.from('store').upsert({ id: 1, name: sv.name || 'FoodDash', address: sv.address || null, lat: +sv.lat, lng: +sv.lng }); error ? toast(error.message, 'err') : (toast('Lokasi toko disimpan'), setSto(null), loadStore()) };
+  const myLoc = async () => { try { const c = await getPos(); setSto({ ...sv, lat: +c.latitude.toFixed(6), lng: +c.longitude.toFixed(6) }); toast('Lokasi perangkat dipakai sebagai lokasi toko') } catch (e) { toast(e.message, 'err') } };
   const toggleBan = async b => { await sb.from('banners').update({ active: !b.active }).eq('id', b.id); loadBan() };
 
-  const tabs = [['dash', 'Omzet', 'chart'], ['orders', 'Pesanan', 'orders'], ['prod', 'Produk', 'box'], ['cat', 'Kategori', 'tag'], ['ship', 'Ongkir & Banner', 'truck'], ['me', 'Profil', 'user']];
+  const tabs = [['dash', 'Omzet', 'chart'], ['orders', 'Pesanan', 'orders'], ['prod', 'Produk', 'box'], ['cat', 'Kategori', 'tag'], ['ship', 'Toko, Ongkir & Banner', 'truck'], ['me', 'Profil', 'user']];
   const F = k => e => setForm({ ...form, [k]: e.target.value });
   const fl = of === 'all' ? orders || [] : of === 'active' ? (orders || []).filter(isActive) : (orders || []).filter(o => o.status === of);
   const sh = ship || st;
@@ -84,6 +87,12 @@ export default function Admin() {
       {(cats || []).map(c => <div className="card row sp hov" key={c.id}><b>{c.name}</b><span className="row"><small>{menu?.filter(m => m.category_id === c.id).length || 0} produk</small><button className="icon" style={{ color: 'var(--bad)', background: '#fdecec' }} onClick={() => del('categories', c.id, loadCats)}><Icon n="trash" s={16} /></button></span></div>)}{cats?.length === 0 && <Empty icon="tag" t="Belum ada kategori" />}</div>}
 
     {tab === 'ship' && <div className="view two">
+      <div className="card"><b>Lokasi toko</b><p><small>Dipakai untuk menghitung jarak ongkir dan titik awal pelacakan driver.</small></p>
+        <label>Nama toko</label><input value={sv.name} onChange={e => setSto({ ...sv, name: e.target.value })} /><label>Alamat</label><input value={sv.address} onChange={e => setSto({ ...sv, address: e.target.value })} />
+        <div className="row"><div className="grow"><label>Latitude</label><input inputMode="decimal" placeholder="-6.7063" value={sv.lat} onChange={e => setSto({ ...sv, lat: e.target.value })} /></div><div className="grow"><label>Longitude</label><input inputMode="decimal" placeholder="108.5571" value={sv.lng} onChange={e => setSto({ ...sv, lng: e.target.value })} /></div></div>
+        <small>Tips: di Google Maps tekan lama pada titik toko, lalu salin angka koordinatnya.</small>
+        <div className="row wrap mt"><button className="ghost sm" onClick={myLoc}><span className="row"><Icon n="pin" s={14} />Pakai lokasi saya sekarang</span></button><button className="grow" disabled={!sto} onClick={saveStore}>Simpan lokasi toko</button></div>
+        {hasPt(sv) && <iframe title="Peta toko" style={{ width: '100%', height: 190, border: 0, borderRadius: 14, marginTop: 12 }} loading="lazy" src={`https://www.openstreetmap.org/export/embed.html?bbox=${+sv.lng - 0.008}%2C${+sv.lat - 0.005}%2C${+sv.lng + 0.008}%2C${+sv.lat + 0.005}&layer=mapnik&marker=${sv.lat}%2C${sv.lng}`} />}</div>
       <div className="card"><b>Pengaturan ongkir</b><p><small>Ongkir = harga dasar + (harga per km × jarak). Jarak dipilih customer saat checkout.</small></p>
         <label>Harga dasar (Rp)</label><input type="number" value={sh.ship_base} onChange={e => setShip({ ...sh, ship_base: e.target.value })} /><label>Harga per km (Rp)</label><input type="number" value={sh.ship_per_km} onChange={e => setShip({ ...sh, ship_per_km: e.target.value })} /><label>Biaya layanan (Rp)</label><input type="number" value={sh.service_fee} onChange={e => setShip({ ...sh, service_fee: e.target.value })} />
         <small>Contoh 5 km: {rp(+sh.ship_base + +sh.ship_per_km * 5)}</small><button className="full mt" disabled={!ship} onClick={saveShip}>Simpan ongkir</button></div>
