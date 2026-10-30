@@ -107,3 +107,13 @@ drop policy if exists media_del on storage.objects; create policy media_del on s
 
 -- 11) Contoh kategori & produk burger (opsional)
 insert into categories(name,sort) values('Combo',1),('Burger',2),('Minuman',3) on conflict do nothing;
+
+-- 12) Hapus user dari Authentication tidak lagi error (foreign key cascade)
+alter table orders drop constraint if exists orders_customer_id_fkey;
+alter table orders add constraint orders_customer_id_fkey foreign key (customer_id) references profiles(id) on delete cascade;
+alter table orders drop constraint if exists orders_driver_id_fkey;
+alter table orders add constraint orders_driver_id_fkey foreign key (driver_id) references profiles(id) on delete set null;
+alter table order_history drop constraint if exists order_history_order_id_fkey;
+alter table order_history add constraint order_history_order_id_fkey foreign key (order_id) references orders(id) on delete cascade;
+alter table messages drop constraint if exists messages_sender_id_fkey;
+alter table messages add constraint messages_sender_id_fkey foreign key (sender_id) references profiles(id) on delete cascade;
