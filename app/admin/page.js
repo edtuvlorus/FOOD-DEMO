@@ -77,11 +77,12 @@ export default function Admin() {
         {o.payment_proof_url && <a href={o.payment_proof_url} target="_blank" rel="noreferrer" style={{display:'inline-flex',alignItems:'center',gap:8,marginTop:8}}><img src={o.payment_proof_url} alt="Bukti pembayaran" style={{width:64,height:64,objectFit:'cover',borderRadius:10}}/><span className="sm ghost">Lihat bukti pembayaran</span></a>}
         <div className="row sp mt"><b className="o">{rp(o.total)}</b><small>{new Date(o.created_at).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' })}</small></div>
         <div className="row wrap mt">
-          
-          {o.status === 'PREPARING' && <button className="sm" onClick={() => act(o.id, 'READY_FOR_PICKUP', 'Diserahkan ke driver (menunggu diambil)')}>Serahkan ke driver</button>}
-          {['PENDING', 'PREPARING', 'READY_FOR_PICKUP'].includes(o.status) && <button className="sm x" onClick={() => act(o.id, 'CANCELLED', 'Pesanan dibatalkan')}>Batalkan</button>}
-          <button className="sm ghost" onClick={() => receiptPdf(o, nm(o.customer_id), o.driver_id && nm(o.driver_id))}><span className="row"><Icon n="file" s={14} />Struk PDF</span></button>
-          <button className="sm x" onClick={() => deleteOrder(o.id)}><Icon n="trash" s={14}/> Hapus kartu</button></div></div>)}</div>}</div>}
+          {o.status === 'PENDING' && <button className="sm" onClick={() => act(o.id, 'PREPARING', 'Pesanan dikonfirmasi dan mulai disiapkan')}>Konfirmasi pesanan</button>}
+          {o.status === 'PREPARING' && <button className="sm" onClick={() => act(o.id, 'READY_FOR_PICKUP', 'Pesanan siap, menunggu driver')}>Siapkan untuk driver</button>}
+          {!['DELIVERED', 'CANCELLED'].includes(o.status) && <button className="sm x" onClick={() => { if (confirm('Batalkan pesanan ini? Stok produk akan dikembalikan.')) act(o.id, 'CANCELLED', 'Pesanan dibatalkan admin'); }}>Cancel pesanan</button>}
+          <button className="sm ghost" onClick={() => receiptPdf(o, nm(o.customer_id), o.driver_id && nm(o.driver_id))}><span className="row"><Icon n="file" s={14} />Cetak struk PDF</span></button>
+          <button className="sm x" onClick={() => deleteOrder(o.id)}><Icon n="trash" s={14}/> Hapus pesanan</button>
+        </div></div>)}</div>}</div>}
 
     {tab === 'payments' && <div className="view"><div className="row sp"><b>Metode pembayaran</b><button className="sm" onClick={() => setPayForm({ category: 'E-Wallet', active: true })}>Tambah metode</button></div>
       <p><small>Atur e-wallet, mobile banking, QRIS, dan metode pembayaran lainnya. Foto QRIS dapat diunggah.</small></p>

@@ -17,3 +17,33 @@ Setelah driver mengambil order, lokasinya dibagikan ke customer (izin lokasi bro
 
 ## Perbaikan bukti pembayaran (v6)
 Jalankan `supabase/schema_v6.sql` di Supabase SQL Editor setelah schema v5. File bukti pembayaran customer disimpan di `media/payment-proofs/<user-id>/...`. Metode COD tidak meminta bukti pembayaran dan mengirim `payment_proof_url` sebagai `null`; metode non-COD tetap wajib mengunggah bukti.
+
+
+## Perbaikan lokasi toko (v7)
+
+Jika tombol **Simpan lokasi toko** menampilkan error RLS pada tabel `store`:
+
+1. Buka Supabase → SQL Editor.
+2. Jalankan seluruh isi `supabase/schema_v7.sql`.
+3. Pastikan akun halaman admin memiliki `role = 'admin'` pada tabel `profiles`.
+4. Muat ulang halaman admin, isi latitude dan longitude, lalu simpan kembali.
+
+Alamat teks saja belum cukup untuk perhitungan ongkir; aplikasi juga memerlukan koordinat latitude dan longitude. Koordinat dapat diambil dari Google Maps atau tombol **Pakai lokasi saya sekarang**.
+
+
+## Revisi admin pesanan (v8)
+
+### Fitur admin
+- **Konfirmasi pesanan:** `PENDING` menjadi `PREPARING`.
+- **Siapkan untuk driver:** `PREPARING` menjadi `READY_FOR_PICKUP`.
+- **Cancel pesanan:** admin dapat membatalkan semua pesanan aktif yang belum selesai. Stok produk dikembalikan dan penugasan driver dilepas.
+- **Cetak struk PDF:** mengunduh struk dari setiap kartu pesanan.
+- **Hapus pesanan:** menghapus pesanan permanen melalui fungsi admin yang sudah tersedia.
+
+### Instalasi
+1. Jalankan `supabase/schema_v8.sql` di Supabase SQL Editor setelah `schema_v7.sql`.
+2. Deploy source code v8 ke GitHub/Vercel.
+3. Tes pesanan baru: konfirmasi → siapkan untuk driver → cetak struk.
+4. Tes cancel pesanan aktif dan pastikan stok kembali.
+
+Catatan: pesanan `DELIVERED` tidak bisa dibatalkan, tetapi kartu pesanan tetap dapat dihapus admin.
