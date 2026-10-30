@@ -16,7 +16,7 @@ const Thumb = ({ m }) => <div className="pimg">{m.image_url ? <img src={m.image_
 
 export default function Customer() {
   const { me, reload } = useGuard('customer'); const { orders, act, load } = useOrders(me);
-  const [menu] = useList('menu_items', 'name', me); const [cats] = useList('categories', 'sort', me); const [banners] = useList('banners', 'sort', me); const [st] = useSettings(me); const [store] = useStore(me);
+  const [menu] = useList('menu_items', 'name', me); const [cats] = useList('categories', 'sort', me); const [banners] = useList('banners', 'sort', me); const [payments] = useList('payment_methods', 'sort', me); const [st] = useSettings(me); const [store] = useStore(me);
   const [tab, setTab] = useState('home'); const [cat, setCat] = useState('all'); const [q, setQ] = useState(''); const [cart, setCart] = useState({});
   const [pick, setPick] = useState(null); const [pq, setPq] = useState(1); const [trackId, setTrackId] = useState(null); const [chat, setChat] = useState(null);
   const [pay, setPay] = useState('COD'); const [proof, setProof] = useState(null); const [proofPreview, setProofPreview] = useState(''); const [uploadingProof, setUploadingProof] = useState(false); const [addr, setAddr] = useState(''); const [km, setKm] = useState(3); const [busy, setBusy] = useState(false); const [ot, setOt] = useState('active'); const [loc, setLoc] = useState(null);
