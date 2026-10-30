@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
-import { sb, rp, toast, STATUS, PAYLABEL, isActive, hav, hasPt, pt, getPos, useGuard, useOrders, useList, useSettings, useProfiles, useStore, useDriverLoc, useChatMeta } from '../../lib/sb';
+import { sb, rp, toast, uploadImage, STATUS, PAYLABEL, isActive, hav, hasPt, pt, getPos, useGuard, useOrders, useList, useSettings, useProfiles, useStore, useDriverLoc, useChatMeta } from '../../lib/sb';
 import { Icon, Avatar, Sheet, Steps, LiveMap, Chat, ProfileView, Empty, BottomNav } from '../../lib/ui';
 
 const DEFAULT_BANNER = [{ id: 'd', title: 'Klaim diskon 30% hari ini!', subtitle: 'Burger, combo, dan minuman favoritmu', image_url: null }];
@@ -19,7 +19,7 @@ export default function Customer() {
   const [menu] = useList('menu_items', 'name', me); const [cats] = useList('categories', 'sort', me); const [banners] = useList('banners', 'sort', me); const [st] = useSettings(me); const [store] = useStore(me);
   const [tab, setTab] = useState('home'); const [cat, setCat] = useState('all'); const [q, setQ] = useState(''); const [cart, setCart] = useState({});
   const [pick, setPick] = useState(null); const [pq, setPq] = useState(1); const [trackId, setTrackId] = useState(null); const [chat, setChat] = useState(null);
-  const [pay, setPay] = useState('COD'); const [addr, setAddr] = useState(''); const [km, setKm] = useState(3); const [busy, setBusy] = useState(false); const [ot, setOt] = useState('active'); const [loc, setLoc] = useState(null);
+  const [pay, setPay] = useState('COD'); const [proof, setProof] = useState(null); const [proofPreview, setProofPreview] = useState(''); const [uploadingProof, setUploadingProof] = useState(false); const [addr, setAddr] = useState(''); const [km, setKm] = useState(3); const [busy, setBusy] = useState(false); const [ot, setOt] = useState('active'); const [loc, setLoc] = useState(null);
   const [saved, loadSaved] = useList('addresses', 'created_at', me); const [selAddr, setSelAddr] = useState(null); const [lbl, setLbl] = useState(''); const [savingAddr, setSavingAddr] = useState(false);
   useEffect(() => { if (me && !addr) setAddr(me.address || '') }, [me]);
   useEffect(() => { if (saved && saved.length && !selAddr) { const d = saved.find(a => a.is_default) || saved[0]; pickAddr(d) } }, [saved]);
@@ -52,8 +52,11 @@ export default function Customer() {
     catch (e) { toast(e.message, 'err') }
   };
   const order = async () => {
-    if (!addr.trim()) return toast('Isi alamat pengiriman', 'err'); setBusy(true);
-    const { error } = await sb.rpc('place_order', { p_items: items.map(m => ({ id: m.id, qty: cart[m.id] })), p_address: addr.trim(), p_distance: km, p_payment: pay, p_lat: loc ? loc.lat : null, p_lng: loc ? loc.lng : null }); setBusy(false);
+    if (!addr.trim()) return toast('Isi alamat pengiriman', 'err');
+    if (pay !== 'COD' && !proof) return toast('Upload bukti pembayaran sebelum memesan', 'err');
+    setBusy(true); let proofUrl = null;
+    if (pay !== 'COD' && proof) { setUploadingProof(true); proofUrl = await uploadImage(proof, 'payment-proofs'); setUploadingProof(false); if (!proofUrl) { setBusy(false); return; } }
+    const { error } = await sb.rpc('place_order', { p_items: items.map(m => ({ id: m.id, qty: cart[m.id] })), p_address: addr.trim(), p_distance: km, p_payment: pay, p_proof: proofUrl, p_lat: loc ? loc.lat : null, p_lng: loc ? loc.lng : null }); setBusy(false);
     if (error) return toast(error.message, 'err'); setCart({}); toast('Pesanan dibuat! Menunggu konfirmasi admin'); setTab('orders'); setOt('active'); load();
   };
   const shown = (orders || []).filter(o => ot === 'active' ? isActive(o) : !isActive(o));
@@ -83,14 +86,17 @@ export default function Customer() {
           {!selAddr && addr.trim() && <div className="row mt"><input className="grow" placeholder="Nama alamat (Rumah, Kantor…)" maxLength={40} value={lbl} onChange={e => setLbl(e.target.value)} /><button className="sm" disabled={savingAddr} onClick={saveAddr}>Simpan alamat</button></div>}
           <label>Perkiraan jarak: <b className="o">{km} km</b></label><input type="range" min="1" max="50" step="0.5" value={km} onChange={e => setKm(+e.target.value)} style={{ padding: 0, accentColor: '#F26A1F' }} /></div>
         <div className="card"><div className="line"><span>Subtotal</span><b>{rp(sub)}</b></div><div className="line"><span>Ongkir ({km} km)</span><b>{rp(ship)}</b></div><div className="line"><span>Biaya layanan</span><b>{rp(st.service_fee)}</b></div><div className="line t"><span>Total</span><span className="o">{rp(total)}</span></div></div>
-        <b>Metode pembayaran</b>{Object.entries(PAYLABEL).map(([k, l]) => <div key={k} className={'pay ' + (pay === k ? 'on' : '')} onClick={() => setPay(k)}><b>{l}</b><span className="dot" /></div>)}
-        <button className="full mt" disabled={busy} onClick={order}>Pesan sekarang · {rp(total)}</button></>}</div>}
+        <b>Metode pembayaran</b>
+        <div className={'pay '+(pay==='COD'?'on':'')} onClick={()=>{setPay('COD');setProof(null);setProofPreview('')}}><b>Bayar di tempat (COD)</b><span className="dot"/></div>
+        {(payments||[]).filter(p=>p.active).map(p=><div key={p.id} className={'pay '+(pay===p.id?'on':'')} onClick={()=>setPay(p.id)}><div className="grow"><b>{p.name}</b><br/><small>{p.category} · {p.account_name} {p.account_number}</small></div>{p.image_url&&<img src={p.image_url} alt={p.name} style={{width:48,height:48,objectFit:'contain'}}/>}<span className="dot"/></div>)}
+        {pay!=='COD' && <div className="card"><b>Bukti pembayaran wajib</b><p><small>Upload screenshot/foto bukti transfer sebelum menekan tombol pesan.</small></p>{proofPreview&&<img src={proofPreview} alt="Preview bukti pembayaran" style={{width:'100%',maxHeight:220,objectFit:'contain',borderRadius:12,marginBottom:8}}/>}<label className="sm soft" style={{display:'inline-block',cursor:'pointer'}}>Pilih foto bukti pembayaran<input type="file" accept="image/*" hidden onChange={e=>{const f=e.target.files?.[0];if(f){setProof(f);setProofPreview(URL.createObjectURL(f))}}}/></label>{proof&&<small style={{display:'block',marginTop:6}}>{proof.name}</small>}</div>}
+        <button className="full mt" disabled={busy||uploadingProof} onClick={order}>{busy?'Memproses...':'Pesan sekarang · '+rp(total)}</button></>}</div>}
 
     {tab === 'orders' && <div className="view"><div className="top"><h2>Pesanan Saya</h2></div>
       <div className="row" style={{ marginBottom: 8 }}><button className={'sm ' + (ot === 'active' ? '' : 'ghost')} onClick={() => setOt('active')}>Aktif</button><button className={'sm ' + (ot === 'hist' ? '' : 'ghost')} onClick={() => setOt('hist')}>Riwayat</button></div>
       {!orders ? <div className="skel" /> : shown.length === 0 ? <Empty icon="orders" t={ot === 'active' ? 'Tidak ada pesanan aktif' : 'Belum ada riwayat'} /> : shown.map(o => <div className="card hov" key={o.id}>
         <div className="row sp"><b>#{o.id.slice(0, 6)}</b><span className={'tag ' + (o.status === 'DELIVERED' ? 'ok' : o.status === 'CANCELLED' ? 'bad' : '')}>{STATUS[o.status]}</span></div>
-        <small>{o.items.map(i => i.qty + '× ' + i.name).join(', ')}</small><div className="row sp mt"><b className="o">{rp(o.total)}</b><small>{PAYLABEL[o.payment_method]}</small></div>
+        <small>{o.items.map(i => i.qty + '× ' + i.name).join(', ')}</small><div className="row sp mt"><b className="o">{rp(o.total)}</b><small>{o.payment_method_name || PAYLABEL[o.payment_method] || o.payment_method}</small></div>
         <div className="row wrap mt"><button className="sm" onClick={() => setTrackId(o.id)}>Lacak pesanan</button>{o.driver_id && <button className="sm ghost" onClick={() => setChat(o)}>Chat driver{cm.unread[o.id] > 0 ? ` (${cm.unread[o.id]})` : ''}</button>}{o.status === 'PENDING' && <button className="sm x" onClick={() => act(o.id, 'CANCELLED', 'Pesanan dibatalkan')}>Batalkan</button>}</div></div>)}</div>}
 
     {tab === 'chat' && <div className="view"><div className="top"><h2>Pesan</h2></div>

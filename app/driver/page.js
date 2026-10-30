@@ -30,7 +30,7 @@ export default function Driver() {
     {!offer && c && <div className="row mt"><Avatar p={c} s={34} /><div className="grow"><b>{c.name}</b><br /><small>{c.phone || 'Customer'}</small></div></div>}
     <small style={{ display: 'block', marginTop: 8 }}>{o.items.map(i => i.qty + '× ' + i.name).join(', ')}</small>
     <div className="row mt"><Icon n="pin" s={15} /><small>{o.address} · {o.distance_km} km</small></div>
-    <div className="row sp mt"><span>Ongkir <b className="o">{rp(o.delivery_fee)}</b></span><small>{PAYLABEL[o.payment_method]} · {rp(o.total)}</small></div>
+    <div className="row sp mt"><span>Ongkir <b className="o">{rp(o.delivery_fee)}</b></span><small>{o.payment_method_name || PAYLABEL[o.payment_method] || o.payment_method} · {rp(o.total)}</small></div>
     <div className="row wrap mt">
       {offer && <button className="grow" onClick={() => go(o, 'DRIVER_ASSIGNED', 'Pesanan kamu! Segera menuju toko')}>Ambil order</button>}
       {!offer && NEXT[o.status] && <button className="grow" onClick={() => go(o, NEXT[o.status][0], NEXT[o.status][2])}>{NEXT[o.status][1]}</button>}

@@ -17,8 +17,9 @@ function buckets(p) {
 const PNAME = { day: 'Hari ini', week: 'Minggu ini', month: 'Bulan ini' };
 
 export default function Admin() {
-  const { me, reload } = useGuard('admin'); const { orders, act } = useOrders(me); const r = useRouter();
+  const { me, reload } = useGuard('admin'); const { orders, act, load: loadOrders } = useOrders(me); const r = useRouter();
   const [menu, loadMenu] = useList('menu_items', 'name', me); const [cats, loadCats] = useList('categories', 'sort', me); const [banners, loadBan] = useList('banners', 'sort', me); const [st, loadSt] = useSettings(me); const [store, loadStore] = useStore(me); const [sto, setSto] = useState(null);
+  const [payments, loadPayments] = useList('payment_methods', 'sort', me); const [payForm, setPayForm] = useState(null);
   const [tab, setTab] = useState('dash'); const [per, setPer] = useState('day'); const [of, setOf] = useState('all'); const [form, setForm] = useState(null); const [catName, setCatName] = useState(''); const [bform, setBform] = useState(null); const [ship, setShip] = useState(null); const [busy, setBusy] = useState(false);
   const pf = useProfiles((orders || []).flatMap(o => [o.customer_id, o.driver_id]));
   const ok = (orders || []).filter(o => o.status !== 'CANCELLED'), done = ok.filter(o => o.status === 'DELIVERED');
@@ -43,6 +44,8 @@ export default function Admin() {
   };
   const upl = (folder, cb) => async e => { setBusy(true); const u = await uploadImage(e.target.files[0], folder); setBusy(false); u && cb(u) };
   const del = async (t, id, reloadFn) => { if (!confirm('Hapus data ini?')) return; const { error } = await sb.from(t).delete().eq('id', id); error ? toast(error.message, 'err') : (toast('Dihapus'), reloadFn()) };
+  const deleteOrder = async id => { if (!confirm('Hapus kartu pesanan ini secara permanen? Stok item akan dikembalikan jika pesanan belum selesai.')) return; const { error } = await sb.rpc('admin_delete_order', { p_id: id }); error ? toast(error.message, 'err') : ((toast('Pesanan dihapus'), loadOrders())); };
+  const savePayment = async () => { if (!payForm?.name?.trim()) return toast('Nama metode pembayaran wajib diisi', 'err'); setBusy(true); const row = { name: payForm.name.trim(), category: payForm.category || 'E-Wallet', account_name: payForm.account_name || '', account_number: payForm.account_number || '', image_url: payForm.image_url || null, active: payForm.active !== false, sort: payForm.sort || (payments?.length || 0) + 1 }; const { error } = payForm.id ? await sb.from('payment_methods').update(row).eq('id', payForm.id) : await sb.from('payment_methods').insert(row); setBusy(false); error ? toast(error.message, 'err') : (toast('Metode pembayaran disimpan'), setPayForm(null), loadPayments()); };
   const addCat = async () => { if (!catName.trim()) return; const { error } = await sb.from('categories').insert({ name: catName.trim(), sort: (cats?.length || 0) + 1 }); error ? toast(error.message, 'err') : (setCatName(''), toast('Kategori dibuat'), loadCats()) };
   const saveShip = async () => { const s = ship; const { error } = await sb.from('settings').upsert([{ key: 'ship_base', value: +s.ship_base }, { key: 'ship_per_km', value: +s.ship_per_km }, { key: 'service_fee', value: +s.service_fee }]); error ? toast(error.message, 'err') : (toast('Pengaturan ongkir disimpan'), loadSt(), setShip(null)) };
   const saveBan = async () => { if (!bform.title?.trim()) return toast('Judul banner wajib diisi', 'err'); const { error } = await sb.from('banners').insert({ title: bform.title, subtitle: bform.subtitle || '', image_url: bform.image_url || null, sort: (banners?.length || 0) + 1 }); error ? toast(error.message, 'err') : (toast('Banner ditambahkan'), setBform(null), loadBan()) };
@@ -51,7 +54,7 @@ export default function Admin() {
   const myLoc = async () => { try { const c = await getPos(); setSto({ ...sv, lat: +c.latitude.toFixed(6), lng: +c.longitude.toFixed(6) }); toast('Lokasi perangkat dipakai sebagai lokasi toko') } catch (e) { toast(e.message, 'err') } };
   const toggleBan = async b => { await sb.from('banners').update({ active: !b.active }).eq('id', b.id); loadBan() };
 
-  const tabs = [['dash', 'Omzet', 'chart'], ['orders', 'Pesanan', 'orders'], ['prod', 'Produk', 'box'], ['cat', 'Kategori', 'tag'], ['ship', 'Toko, Ongkir & Banner', 'truck'], ['me', 'Profil', 'user']];
+  const tabs = [['dash', 'Omzet', 'chart'], ['orders', 'Pesanan', 'orders'], ['payments', 'Pembayaran', 'wallet'], ['prod', 'Produk', 'box'], ['cat', 'Kategori', 'tag'], ['ship', 'Toko, Ongkir & Banner', 'truck'], ['me', 'Profil', 'user']];
   const F = k => e => setForm({ ...form, [k]: e.target.value });
   const fl = of === 'all' ? orders || [] : of === 'active' ? (orders || []).filter(isActive) : (orders || []).filter(o => o.status === of);
   const sh = ship || st;
@@ -70,14 +73,21 @@ export default function Admin() {
       {!orders ? <div className="skel" /> : fl.length === 0 ? <Empty icon="orders" t="Tidak ada pesanan" /> : <div className="two">{fl.map(o => <div className="card hov" key={o.id}>
         <div className="row sp"><b>#{o.id.slice(0, 6)}</b><span className={'tag ' + (o.status === 'DELIVERED' ? 'ok' : o.status === 'CANCELLED' ? 'bad' : '')}>{STATUS[o.status]}</span></div>
         <div className="row mt"><Avatar p={pf[o.customer_id]} s={30} /><small>{nm(o.customer_id)}{o.driver_id && <> · driver: <b>{nm(o.driver_id)}</b></>}</small></div>
-        <small style={{ display: 'block', margin: '8px 0' }}>{o.items.map(i => i.qty + '× ' + i.name).join(', ')}</small><small>{o.address} · {o.distance_km} km · {PAYLABEL[o.payment_method]}</small>
+        <small style={{ display: 'block', margin: '8px 0' }}>{o.items.map(i => i.qty + '× ' + i.name).join(', ')}</small><small>{o.address} · {o.distance_km} km · {o.payment_method_name || PAYLABEL[o.payment_method] || o.payment_method}</small>
+        {o.payment_proof_url && <a href={o.payment_proof_url} target="_blank" rel="noreferrer" style={{display:'inline-flex',alignItems:'center',gap:8,marginTop:8}}><img src={o.payment_proof_url} alt="Bukti pembayaran" style={{width:64,height:64,objectFit:'cover',borderRadius:10}}/><span className="sm ghost">Lihat bukti pembayaran</span></a>}
         <div className="row sp mt"><b className="o">{rp(o.total)}</b><small>{new Date(o.created_at).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' })}</small></div>
         <div className="row wrap mt">
-          {o.status === 'PENDING' && <button className="sm" onClick={() => act(o.id, 'PREPARING', 'Pesanan dikonfirmasi')}>Konfirmasi & siapkan</button>}
+          
           {o.status === 'PREPARING' && <button className="sm" onClick={() => act(o.id, 'READY_FOR_PICKUP', 'Diserahkan ke driver (menunggu diambil)')}>Serahkan ke driver</button>}
           {['PENDING', 'PREPARING', 'READY_FOR_PICKUP'].includes(o.status) && <button className="sm x" onClick={() => act(o.id, 'CANCELLED', 'Pesanan dibatalkan')}>Batalkan</button>}
-          <button className="sm ghost" onClick={() => receiptPdf(o, nm(o.customer_id), o.driver_id && nm(o.driver_id))}><span className="row"><Icon n="file" s={14} />Struk PDF</span></button></div></div>)}</div>}</div>}
+          <button className="sm ghost" onClick={() => receiptPdf(o, nm(o.customer_id), o.driver_id && nm(o.driver_id))}><span className="row"><Icon n="file" s={14} />Struk PDF</span></button>
+          <button className="sm x" onClick={() => deleteOrder(o.id)}><Icon n="trash" s={14}/> Hapus kartu</button></div></div>)}</div>}</div>}
 
+    {tab === 'payments' && <div className="view"><div className="row sp"><b>Metode pembayaran</b><button className="sm" onClick={() => setPayForm({ category: 'E-Wallet', active: true })}>Tambah metode</button></div>
+      <p><small>Atur e-wallet, mobile banking, QRIS, dan metode pembayaran lainnya. Foto QRIS dapat diunggah.</small></p>
+      {(payments || []).map(p => <div className="card row" key={p.id}><div className="thumb">{p.image_url ? <img src={p.image_url} alt="" /> : <Icon n="wallet"/>}</div><div className="grow"><b>{p.name}</b><br/><small>{p.category} · {p.account_name} {p.account_number}</small><br/><span className={'tag '+(p.active?'ok':'bad')}>{p.active?'Aktif':'Nonaktif'}</span></div><button className="icon" onClick={() => setPayForm(p)}><Icon n="edit" s={16}/></button><button className="icon" onClick={() => del('payment_methods',p.id,loadPayments)}><Icon n="trash" s={16}/></button></div>)}
+      {payments?.length===0 && <Empty icon="wallet" t="Belum ada metode pembayaran"/>}
+    </div>}
     {tab === 'prod' && <div className="view"><div className="row sp"><b>{menu?.length || 0} produk</b><button className="sm" onClick={() => setForm({ available: true, stock: 50, rating: 4.5 })}><span className="row"><Icon n="plus" s={14} />Tambah produk</span></button></div>
       {menu && menu.length === 0 && <Empty t="Belum ada produk" />}<div className="two mt">{(menu || []).map(m => <div className="card hov row" key={m.id}><div className="thumb">{m.image_url ? <img src={m.image_url} alt="" /> : (m.emoji || '🍔')}</div>
         <div className="grow"><b>{m.name}</b> {!m.available && <span className="tag bad">Nonaktif</span>}<br /><small>{cats?.find(c => c.id === m.category_id)?.name || 'Tanpa kategori'}</small><br /><span className="o b">{rp(m.price)}</span> <span className={'tag ' + (m.stock < 5 ? 'bad' : 'ok')}>Stok {m.stock}</span></div>
@@ -101,6 +111,14 @@ export default function Admin() {
 
     {tab === 'me' && <div style={{ maxWidth: 440, margin: '0 auto' }}><ProfileView me={me} reload={reload} /></div>}
 
+    {payForm && <Sheet wide onClose={() => setPayForm(null)}><h3>{payForm.id?'Edit metode pembayaran':'Tambah metode pembayaran'}</h3>
+      <label>Nama metode</label><input placeholder="Contoh: GoPay, BCA Mobile, QRIS" value={payForm.name||''} onChange={e=>setPayForm({...payForm,name:e.target.value})}/>
+      <label>Kategori</label><select value={payForm.category||'E-Wallet'} onChange={e=>setPayForm({...payForm,category:e.target.value})}>{['E-Wallet','Mobile Banking','QRIS','Transfer Bank','Lainnya'].map(x=><option key={x}>{x}</option>)}</select>
+      <label>Nama pemilik rekening</label><input value={payForm.account_name||''} onChange={e=>setPayForm({...payForm,account_name:e.target.value})}/>
+      <label>Nomor rekening / nomor tujuan</label><input value={payForm.account_number||''} onChange={e=>setPayForm({...payForm,account_number:e.target.value})}/>
+      <div className="row mt"><div className="thumb" style={{width:100,height:100}}>{payForm.image_url?<img src={payForm.image_url} alt="QRIS"/>:<Icon n="image" s={28}/>}</div><label className="grow"><span style={{color:'var(--o)',fontWeight:600,cursor:'pointer'}}>Upload foto QRIS / instruksi pembayaran</span><input type="file" accept="image/*" hidden onChange={upl('payments',u=>setPayForm(f=>({...f,image_url:u})))}/></label></div>
+      <label className="row"><input type="checkbox" style={{width:18,margin:0}} checked={payForm.active!==false} onChange={e=>setPayForm({...payForm,active:e.target.checked})}/>Tampilkan ke customer</label>
+      <button className="full mt" disabled={busy} onClick={savePayment}>Simpan metode</button></Sheet>}
     {form && <Sheet wide onClose={() => setForm(null)}><h3>{form.id ? 'Ubah produk' : 'Produk baru'}</h3>
       <div className="row mt"><div className="thumb" style={{ width: 80, height: 80 }}>{form.image_url ? <img src={form.image_url} alt="" /> : <Icon n="image" s={28} />}</div><label className="grow"><span className="ghost" style={{ display: 'inline-block', padding: '9px 14px', borderRadius: 12, boxShadow: 'inset 0 0 0 1.5px var(--o)', color: 'var(--o)', cursor: 'pointer', fontWeight: 600 }}>Upload foto</span><input type="file" accept="image/*" hidden onChange={upl('products', u => setForm(f => ({ ...f, image_url: u })))} /></label></div>
       <label>Nama</label><input value={form.name || ''} onChange={F('name')} /><div className="row"><div className="grow"><label>Harga (Rp)</label><input type="number" value={form.price ?? ''} onChange={F('price')} /></div><div className="grow"><label>Jumlah stok</label><input type="number" value={form.stock ?? ''} onChange={F('stock')} /></div></div>

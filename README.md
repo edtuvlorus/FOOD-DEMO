@@ -13,3 +13,11 @@ Customer pesan (PENDING) → Admin konfirmasi (PREPARING) → Admin serahkan ke 
 
 ## Pelacakan driver
 Setelah driver mengambil order, lokasinya dibagikan ke customer (izin lokasi browser harus diizinkan; HTTPS wajib, Vercel sudah HTTPS). Customer melihat motor bergerak dan estimasi tiba. Admin mengatur lokasi toko di tab Toko, Ongkir & Banner.
+
+## Revisi v5
+- Status `PENDING -> PREPARING` ditolak oleh database dan tombol konfirmasinya di dashboard admin dihilangkan.
+- Admin dapat mengubah dan menyimpan nama/alamat/koordinat toko di tab Toko.
+- Admin dapat menambah, mengedit, mengaktifkan/nonaktifkan, dan menghapus metode pembayaran (E-Wallet, Mobile Banking, QRIS, Transfer Bank, dll), termasuk upload gambar QRIS.
+- Customer wajib mengunggah bukti pembayaran untuk metode non-COD sebelum order dibuat. Bukti disimpan di Storage bucket `media`.
+- Admin dapat melihat thumbnail dan membuka bukti pembayaran dari kartu order.
+- Admin dapat menghapus kartu order. Stok dikembalikan otomatis untuk order yang belum selesai/dibatalkan.
