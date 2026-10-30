@@ -20,7 +20,9 @@ export default function Customer() {
   const [tab, setTab] = useState('home'); const [cat, setCat] = useState('all'); const [q, setQ] = useState(''); const [cart, setCart] = useState({});
   const [pick, setPick] = useState(null); const [pq, setPq] = useState(1); const [trackId, setTrackId] = useState(null); const [chat, setChat] = useState(null);
   const [pay, setPay] = useState('COD'); const [addr, setAddr] = useState(''); const [km, setKm] = useState(3); const [busy, setBusy] = useState(false); const [ot, setOt] = useState('active'); const [loc, setLoc] = useState(null);
+  const [saved, loadSaved] = useList('addresses', 'created_at', me); const [selAddr, setSelAddr] = useState(null); const [lbl, setLbl] = useState(''); const [savingAddr, setSavingAddr] = useState(false);
   useEffect(() => { if (me && !addr) setAddr(me.address || '') }, [me]);
+  useEffect(() => { if (saved && saved.length && !selAddr) { const d = saved.find(a => a.is_default) || saved[0]; pickAddr(d) } }, [saved]);
   const pf = useProfiles((orders || []).map(o => o.driver_id)); const cm = useChatMeta(me, orders, chat?.id);
   const track = orders?.find(o => o.id === trackId); const dl = useDriverLoc(track?.id, !!track && ['DRIVER_ASSIGNED', 'ON_DELIVERY', 'DELIVERED'].includes(track.status));
   const list = useMemo(() => (menu || []).filter(m => m.available && (cat === 'all' || m.category_id === cat) && m.name.toLowerCase().includes(q.toLowerCase())), [menu, cat, q]);
@@ -29,6 +31,17 @@ export default function Customer() {
   const items = (menu || []).filter(m => cart[m.id]); const sub = items.reduce((s, m) => s + m.price * cart[m.id], 0); const count = items.reduce((s, m) => s + cart[m.id], 0);
   const ship = st.ship_base + st.ship_per_km * km; const total = sub + ship + st.service_fee;
   const add = (m, n = 1) => { setCart(c => ({ ...c, [m.id]: Math.max(0, Math.min((c[m.id] || 0) + n, m.stock, 20)) })); if (n > 0) toast(m.name + ' masuk keranjang') };
+  function pickAddr(a) {
+    setSelAddr(a.id); setAddr(a.address); setLoc(hasPt(a) ? pt(a.lat, a.lng) : null);
+    if (a.distance_km) setKm(+a.distance_km); else if (hasPt(a) && hasPt(store)) setKm(Math.min(50, Math.max(1, Math.round(hav(pt(a.lat, a.lng), pt(store.lat, store.lng)) * 1.25 * 10) / 10)));
+  }
+  const saveAddr = async () => {
+    if (!addr.trim()) return toast('Isi alamat dulu', 'err'); if (!lbl.trim()) return toast('Beri nama alamat (mis. Rumah, Kantor)', 'err'); setSavingAddr(true);
+    const { data, error } = await sb.from('addresses').insert({ user_id: me.id, label: lbl.trim(), address: addr.trim(), lat: loc ? loc.lat : null, lng: loc ? loc.lng : null, distance_km: km, is_default: !(saved || []).length }).select().single(); setSavingAddr(false);
+    if (error) return toast(error.message, 'err'); toast('Alamat disimpan'); setLbl(''); setSelAddr(data.id); loadSaved();
+  };
+  const delAddr = async id => { const { error } = await sb.from('addresses').delete().eq('id', id); if (error) return toast(error.message, 'err'); if (selAddr === id) setSelAddr(null); toast('Alamat dihapus'); loadSaved() };
+  const defAddr = async id => { await sb.from('addresses').update({ is_default: false }).eq('user_id', me.id); const { error } = await sb.from('addresses').update({ is_default: true }).eq('id', id); error ? toast(error.message, 'err') : (toast('Dijadikan alamat utama'), loadSaved()) };
   const detectLoc = async () => {
     try { const c = await getPos(); const me_ = pt(c.latitude, c.longitude); setLoc(me_);
       if (hasPt(store)) { const d = Math.min(50, Math.max(1, Math.round(hav(me_, pt(store.lat, store.lng)) * 1.25 * 10) / 10)); setKm(d); toast('Lokasi terdeteksi · jarak ±' + d + ' km dari toko') } else toast('Lokasi terdeteksi') }
@@ -63,7 +76,11 @@ export default function Customer() {
       {items.length === 0 ? <Empty icon="cart" t="Keranjang masih kosong" /> : <>
         {items.map(m => <div className="card row" key={m.id}><div className="thumb">{m.image_url ? <img src={m.image_url} alt="" /> : (m.emoji || '🍔')}</div><div className="grow"><b>{m.name}</b><br /><span className="o b">{rp(m.price * cart[m.id])}</span></div>
           <div className="qty"><button className="round soft" onClick={() => add(m, -1)}><Icon n="minus" s={14} /></button><b>{cart[m.id]}</b><button className="round" onClick={() => add(m, 1)}><Icon n="plus" s={14} /></button></div></div>)}
-        <div className="card"><label>Alamat pengiriman</label><input placeholder="Jalan, nomor rumah, patokan" value={addr} onChange={e => setAddr(e.target.value)} /><button className="soft sm" onClick={detectLoc}><span className="row"><Icon n="pin" s={14} />{loc ? 'Lokasi terdeteksi ✓ (perbarui)' : 'Gunakan lokasi saya'}</span></button>
+        <div className="card"><label>Alamat pengiriman</label>
+          {saved && saved.length > 0 && <div className="chips">{saved.map(a => <button key={a.id} className={'chip ' + (selAddr === a.id ? 'on' : '')} onClick={() => pickAddr(a)}>{a.is_default ? '★ ' : ''}{a.label}</button>)}</div>}
+          {selAddr && saved?.find(a => a.id === selAddr) && <div className="row wrap" style={{ marginBottom: 6 }}>{!saved.find(a => a.id === selAddr).is_default && <button className="ghost sm" onClick={() => defAddr(selAddr)}>Jadikan utama</button>}<button className="ghost sm x" onClick={() => delAddr(selAddr)}>Hapus alamat ini</button></div>}
+          <input placeholder="Jalan, nomor rumah, patokan" value={addr} onChange={e => { setAddr(e.target.value); setSelAddr(null) }} /><button className="soft sm" onClick={detectLoc}><span className="row"><Icon n="pin" s={14} />{loc ? 'Lokasi terdeteksi ✓ (perbarui)' : 'Gunakan lokasi saya'}</span></button>
+          {!selAddr && addr.trim() && <div className="row mt"><input className="grow" placeholder="Nama alamat (Rumah, Kantor…)" maxLength={40} value={lbl} onChange={e => setLbl(e.target.value)} /><button className="sm" disabled={savingAddr} onClick={saveAddr}>Simpan alamat</button></div>}
           <label>Perkiraan jarak: <b className="o">{km} km</b></label><input type="range" min="1" max="50" step="0.5" value={km} onChange={e => setKm(+e.target.value)} style={{ padding: 0, accentColor: '#F26A1F' }} /></div>
         <div className="card"><div className="line"><span>Subtotal</span><b>{rp(sub)}</b></div><div className="line"><span>Ongkir ({km} km)</span><b>{rp(ship)}</b></div><div className="line"><span>Biaya layanan</span><b>{rp(st.service_fee)}</b></div><div className="line t"><span>Total</span><span className="o">{rp(total)}</span></div></div>
         <b>Metode pembayaran</b>{Object.entries(PAYLABEL).map(([k, l]) => <div key={k} className={'pay ' + (pay === k ? 'on' : '')} onClick={() => setPay(k)}><b>{l}</b><span className="dot" /></div>)}
