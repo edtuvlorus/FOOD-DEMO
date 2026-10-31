@@ -20,13 +20,12 @@ export default function Admin() {
   const { me, reload } = useGuard('admin'); const { orders, act, load: loadOrders } = useOrders(me); const r = useRouter();
   const [menu, loadMenu] = useList('menu_items', 'name', me); const [cats, loadCats] = useList('categories', 'sort', me); const [banners, loadBan] = useList('banners', 'sort', me); const [st, loadSt] = useSettings(me); const [store, loadStore] = useStore(me); const [sto, setSto] = useState(null);
   const [payments, loadPayments] = useList('payment_methods', 'sort', me); const [payForm, setPayForm] = useState(null);
-  const [tab, setTab] = useState(() => typeof window !== 'undefined' ? localStorage.getItem('fooddash_admin_tab') || 'dash' : 'dash'); const [proofModal, setProofModal] = useState(null); const [per, setPer] = useState('day'); const [of, setOf] = useState('all'); const [form, setForm] = useState(null); const [catName, setCatName] = useState(''); const [bform, setBform] = useState(null); const [ship, setShip] = useState(null); const [busy, setBusy] = useState(false);
+  const [tab, setTab] = useState('dash'); const [proofModal, setProofModal] = useState(null); const [per, setPer] = useState('day'); const [of, setOf] = useState('all'); const [form, setForm] = useState(null); const [catName, setCatName] = useState(''); const [bform, setBform] = useState(null); const [ship, setShip] = useState(null); const [busy, setBusy] = useState(false);
   const pf = useProfiles((orders || []).flatMap(o => [o.customer_id, o.driver_id]));
   const ok = (orders || []).filter(o => o.status !== 'CANCELLED'), done = ok.filter(o => o.status === 'DELIVERED');
   const bks = useMemo(() => { const b = buckets(per), m = Object.fromEntries(b.map(x => [x.key, 0])); done.forEach(o => { const k = bucket(o.created_at, per); if (k in m) m[k] += Number(o.total) }); return b.map(x => ({ ...x, v: m[x.key] })) }, [orders, per]);
-  if (!me) return <div className="adm"><div className="skel mt" /></div>;
   const cur = bks[bks.length - 1]?.v || 0, rng = bks.reduce((s, x) => s + x.v, 0), max = Math.max(...bks.map(x => x.v), 1);
-  const sold = {}; ok.forEach(o => o.items.forEach(i => { const s = sold[i.name] || (sold[i.name] = { q: 0, v: 0 }); s.q += i.qty; s.v += i.qty * i.price }));
+  const sold = {}; ok.forEach(o => (Array.isArray(o.items) ? o.items : []).forEach(i => { const s = sold[i.name] || (sold[i.name] = { q: 0, v: 0 }); s.q += i.qty; s.v += i.qty * i.price }));
   const itemsSold = Object.values(sold).reduce((s, x) => s + x.q, 0); const nm = id => pf[id]?.name || '-';
 
   const exportOverview = async () => {
@@ -55,7 +54,9 @@ export default function Admin() {
   const toggleBan = async b => { await sb.from('banners').update({ active: !b.active }).eq('id', b.id); loadBan() };
 
   const tabs = [['dash', 'Omzet', 'chart'], ['orders', 'Pesanan', 'orders'], ['payments', 'Pembayaran', 'wallet'], ['prod', 'Produk', 'box'], ['cat', 'Kategori', 'tag'], ['ship', 'Toko, Ongkir & Banner', 'truck'], ['me', 'Profil', 'user']];
+  useEffect(() => { try { const saved = localStorage.getItem('fooddash_admin_tab'); if (saved) setTab(saved); } catch {} }, []);
   useEffect(() => { try { localStorage.setItem('fooddash_admin_tab', tab) } catch {} }, [tab]);
+  if (!me) return <div className="adm"><div className="skel mt" /></div>;
   const F = k => e => setForm({ ...form, [k]: e.target.value });
   const fl = of === 'all' ? orders || [] : of === 'active' ? (orders || []).filter(isActive) : (orders || []).filter(o => o.status === of);
   const sh = ship || st;
@@ -74,7 +75,7 @@ export default function Admin() {
       {!orders ? <div className="skel" /> : fl.length === 0 ? <Empty icon="orders" t="Tidak ada pesanan" /> : <div className="two">{fl.map(o => <div className="card hov" key={o.id}>
         <div className="row sp"><b>#{o.id.slice(0, 6)}</b><span className={'tag ' + (o.status === 'DELIVERED' ? 'ok' : o.status === 'CANCELLED' ? 'bad' : '')}>{STATUS[o.status]}</span></div>
         <div className="row mt"><Avatar p={pf[o.customer_id]} s={30} /><small>{nm(o.customer_id)}{o.driver_id && <> · driver: <b>{nm(o.driver_id)}</b></>}</small></div>
-        <small style={{ display: 'block', margin: '8px 0' }}>{o.items.map(i => i.qty + '× ' + i.name).join(', ')}</small><small>{o.address} · {o.distance_km} km · {o.payment_method_name || PAYLABEL[o.payment_method] || o.payment_method}</small>
+        <small style={{ display: 'block', margin: '8px 0' }}>{(Array.isArray(o.items) ? o.items : []).map(i => i.qty + '× ' + i.name).join(', ')}</small><small>{o.address} · {o.distance_km} km · {o.payment_method_name || PAYLABEL[o.payment_method] || o.payment_method}</small>
         {o.payment_proof_url && <button className="sm ghost" style={{marginTop:8}} onClick={() => setProofModal(o)}><span className="row"><Icon n="file" s={14}/>Lihat bukti pembayaran</span></button>}
         <div className="row sp mt"><b className="o">{rp(o.total)}</b><small>{new Date(o.created_at).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' })}</small></div>
         <div className="row wrap mt">

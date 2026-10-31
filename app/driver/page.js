@@ -7,7 +7,7 @@ const NEXT = { DRIVER_ASSIGNED: ['ON_DELIVERY', 'Mulai antar', 'Pesanan diantar,
 
 export default function Driver() {
   const { me, reload } = useGuard('driver'); const { orders, act } = useOrders(me);
-  const [tab, setTab] = useState(() => typeof window !== 'undefined' ? localStorage.getItem('fooddash_driver_tab') || 'offers' : 'offers'); const [chat, setChat] = useState(null); const [det, setDet] = useState(null); const [oh, setOh] = useState('active'); const [share, setShare] = useState(true); const [busyOrder, setBusyOrder] = useState(null);
+  const [tab, setTab] = useState('offers'); const [chat, setChat] = useState(null); const [det, setDet] = useState(null); const [oh, setOh] = useState('active'); const [share, setShare] = useState(true); const [busyOrder, setBusyOrder] = useState(null);
   const pf = useProfiles((orders || []).map(o => o.customer_id));
   const mine = (orders || []).filter(o => me && o.driver_id === me.id); const cm = useChatMeta(me, mine, chat?.id);
   const live = mine.filter(o => ['DRIVER_ASSIGNED', 'ON_DELIVERY'].includes(o.status)); const liveKey = live.map(o => o.id + o.status).join(',');
@@ -20,6 +20,7 @@ export default function Driver() {
     }, e => toast(e.code === 1 ? 'Izin lokasi ditolak. Aktifkan lokasi agar customer bisa melacakmu.' : 'Lokasi tidak tersedia', 'err'), { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 });
     return () => navigator.geolocation.clearWatch(wid);
   }, [me?.id, share, liveKey]);
+  useEffect(() => { try { const saved = localStorage.getItem('fooddash_driver_tab'); if (saved) setTab(saved); } catch {} }, []);
   useEffect(() => { try { localStorage.setItem('fooddash_driver_tab', tab) } catch {} }, [tab]);
   if (!me) return <div className="phone"><div className="skel mt" /></div>;
   const go = async (o, s, msg) => {
@@ -39,7 +40,7 @@ export default function Driver() {
   const card = (o, offer) => { const c = pf[o.customer_id]; return <div className="card hov" key={o.id}>
     <div className="row sp"><b>#{o.id.slice(0, 6)}</b><span className={'tag ' + (o.status === 'DELIVERED' ? 'ok' : o.status === 'CANCELLED' ? 'bad' : '')}>{STATUS[o.status]}</span></div>
     {!offer && c && <div className="row mt"><Avatar p={c} s={34} /><div className="grow"><b>{c.name}</b><br /><small>{c.phone || 'Customer'}</small></div></div>}
-    <small style={{ display: 'block', marginTop: 8 }}>{o.items.map(i => i.qty + '× ' + i.name).join(', ')}</small>
+    <small style={{ display: 'block', marginTop: 8 }}>{(Array.isArray(o.items) ? o.items : []).map(i => i.qty + '× ' + i.name).join(', ')}</small>
     <div className="row mt"><Icon n="pin" s={15} /><small>{o.address} · {o.distance_km} km</small></div>
     <div className="row sp mt"><span>Ongkir <b className="o">{rp(o.delivery_fee)}</b></span><small>{o.payment_method_name || PAYLABEL[o.payment_method] || o.payment_method} · {rp(o.total)}</small></div>
     <div className="row wrap mt">

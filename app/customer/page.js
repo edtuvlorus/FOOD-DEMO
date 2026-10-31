@@ -17,7 +17,7 @@ const Thumb = ({ m }) => <div className="pimg">{m.image_url ? <img src={m.image_
 export default function Customer() {
   const { me, reload } = useGuard('customer'); const { orders, act, load } = useOrders(me);
   const [menu] = useList('menu_items', 'name', me); const [cats] = useList('categories', 'sort', me); const [banners] = useList('banners', 'sort', me); const [payments] = useList('payment_methods', 'sort', me); const [st] = useSettings(me); const [store] = useStore(me);
-  const [tab, setTab] = useState(() => typeof window !== 'undefined' ? localStorage.getItem('fooddash_customer_tab') || 'home' : 'home'); const [cat, setCat] = useState('all'); const [q, setQ] = useState(''); const [cart, setCart] = useState({});
+  const [tab, setTab] = useState('home'); const [cat, setCat] = useState('all'); const [q, setQ] = useState(''); const [cart, setCart] = useState({});
   const [pick, setPick] = useState(null); const [pq, setPq] = useState(1); const [trackId, setTrackId] = useState(null); const [chat, setChat] = useState(null);
   const [pay, setPay] = useState('COD'); const [proof, setProof] = useState(null); const [proofPreview, setProofPreview] = useState(''); const [uploadingProof, setUploadingProof] = useState(false); const [addr, setAddr] = useState(''); const [km, setKm] = useState(3); const [busy, setBusy] = useState(false); const [ot, setOt] = useState('active'); const [loc, setLoc] = useState(null);
   const [saved, loadSaved] = useList('addresses', 'created_at', me); const [selAddr, setSelAddr] = useState(null); const [lbl, setLbl] = useState(''); const [savingAddr, setSavingAddr] = useState(false);
@@ -26,6 +26,7 @@ export default function Customer() {
   const pf = useProfiles((orders || []).map(o => o.driver_id)); const cm = useChatMeta(me, orders, chat?.id);
   const track = orders?.find(o => o.id === trackId); const dl = useDriverLoc(track?.id, !!track && ['DRIVER_ASSIGNED', 'ON_DELIVERY', 'DELIVERED'].includes(track.status));
   const list = useMemo(() => (menu || []).filter(m => m.available && (cat === 'all' || m.category_id === cat) && m.name.toLowerCase().includes(q.toLowerCase())), [menu, cat, q]);
+  useEffect(() => { try { const saved = localStorage.getItem('fooddash_customer_tab'); if (saved) setTab(saved); } catch {} }, []);
   useEffect(() => { try { localStorage.setItem('fooddash_customer_tab', tab) } catch {} }, [tab]);
   if (!me) return <div className="phone"><div className="skel mt" /><div className="skel mt" /></div>;
 
@@ -99,7 +100,7 @@ export default function Customer() {
       <div className="row" style={{ marginBottom: 8 }}><button className={'sm ' + (ot === 'active' ? '' : 'ghost')} onClick={() => setOt('active')}>Aktif</button><button className={'sm ' + (ot === 'hist' ? '' : 'ghost')} onClick={() => setOt('hist')}>Riwayat</button></div>
       {!orders ? <div className="skel" /> : shown.length === 0 ? <Empty icon="orders" t={ot === 'active' ? 'Tidak ada pesanan aktif' : 'Belum ada riwayat'} /> : shown.map(o => <div className="card hov" key={o.id}>
         <div className="row sp"><b>#{o.id.slice(0, 6)}</b><span className={'tag ' + (o.status === 'DELIVERED' ? 'ok' : o.status === 'CANCELLED' ? 'bad' : '')}>{STATUS[o.status]}</span></div>
-        <small>{o.items.map(i => i.qty + '× ' + i.name).join(', ')}</small><div className="row sp mt"><b className="o">{rp(o.total)}</b><small>{o.payment_method_name || PAYLABEL[o.payment_method] || o.payment_method}</small></div>
+        <small>{(Array.isArray(o.items) ? o.items : []).map(i => i.qty + '× ' + i.name).join(', ')}</small><div className="row sp mt"><b className="o">{rp(o.total)}</b><small>{o.payment_method_name || PAYLABEL[o.payment_method] || o.payment_method}</small></div>
         <div className="row wrap mt"><button className="sm" onClick={() => setTrackId(o.id)}>Lacak pesanan</button>{o.driver_id && <button className="sm ghost" onClick={() => setChat(o)}>Chat driver{cm.unread[o.id] > 0 ? ` (${cm.unread[o.id]})` : ''}</button>}{o.status === 'PENDING' && <button className="sm x" onClick={() => act(o.id, 'CANCELLED', 'Pesanan dibatalkan')}>Batalkan</button>}</div></div>)}</div>}
 
     {tab === 'chat' && <div className="view"><div className="top"><h2>Pesan</h2></div>
