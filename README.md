@@ -88,3 +88,9 @@ Jalankan `supabase/schema_v11.sql` setelah schema sebelumnya. Alur final:
 5. Driver menyelesaikan → `DELIVERED`.
 
 Status dipantau lewat realtime/polling pada customer, admin, dan driver. Tab dashboard juga disimpan di browser agar refresh tidak kembali ke halaman awal. Admin dapat membuka bukti pembayaran dalam popup.
+
+## Per-account page persistence (v14)
+- Admin, driver, and customer dashboard tabs are saved with the authenticated Supabase user ID as part of the localStorage key.
+- Different accounts on the same browser no longer share the last-opened tab.
+- On refresh, the app waits until the authenticated profile is loaded, then restores that account's own tab. A new account starts at its role's default tab.
+- Route access remains role-guarded: admin -> `/admin`, driver -> `/driver`, customer -> `/customer`; logging in redirects according to the role stored in `profiles`.

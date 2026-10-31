@@ -20,7 +20,7 @@ export default function Admin() {
   const { me, reload } = useGuard('admin'); const { orders, act, load: loadOrders } = useOrders(me); const r = useRouter();
   const [menu, loadMenu] = useList('menu_items', 'name', me); const [cats, loadCats] = useList('categories', 'sort', me); const [banners, loadBan] = useList('banners', 'sort', me); const [st, loadSt] = useSettings(me); const [store, loadStore] = useStore(me); const [sto, setSto] = useState(null);
   const [payments, loadPayments] = useList('payment_methods', 'sort', me); const [payForm, setPayForm] = useState(null);
-  const [tab, setTab] = useState('dash'); const [proofModal, setProofModal] = useState(null); const [per, setPer] = useState('day'); const [of, setOf] = useState('all'); const [form, setForm] = useState(null); const [catName, setCatName] = useState(''); const [bform, setBform] = useState(null); const [ship, setShip] = useState(null); const [busy, setBusy] = useState(false);
+  const [tab, setTab] = useState('dash'); const [tabOwner, setTabOwner] = useState(null); const [proofModal, setProofModal] = useState(null); const [per, setPer] = useState('day'); const [of, setOf] = useState('all'); const [form, setForm] = useState(null); const [catName, setCatName] = useState(''); const [bform, setBform] = useState(null); const [ship, setShip] = useState(null); const [busy, setBusy] = useState(false);
   const pf = useProfiles((orders || []).flatMap(o => [o.customer_id, o.driver_id]));
   const ok = (orders || []).filter(o => o.status !== 'CANCELLED'), done = ok.filter(o => o.status === 'DELIVERED');
   const bks = useMemo(() => { const b = buckets(per), m = Object.fromEntries(b.map(x => [x.key, 0])); done.forEach(o => { const k = bucket(o.created_at, per); if (k in m) m[k] += Number(o.total) }); return b.map(x => ({ ...x, v: m[x.key] })) }, [orders, per]);
@@ -54,8 +54,16 @@ export default function Admin() {
   const toggleBan = async b => { await sb.from('banners').update({ active: !b.active }).eq('id', b.id); loadBan() };
 
   const tabs = [['dash', 'Omzet', 'chart'], ['orders', 'Pesanan', 'orders'], ['payments', 'Pembayaran', 'wallet'], ['prod', 'Produk', 'box'], ['cat', 'Kategori', 'tag'], ['ship', 'Toko, Ongkir & Banner', 'truck'], ['me', 'Profil', 'user']];
-  useEffect(() => { try { const saved = localStorage.getItem('fooddash_admin_tab'); if (saved) setTab(saved); } catch {} }, []);
-  useEffect(() => { try { localStorage.setItem('fooddash_admin_tab', tab) } catch {} }, [tab]);
+  // Preferensi tab disimpan terpisah untuk setiap akun Supabase, bukan global per perangkat/role.
+  useEffect(() => {
+    if (!me?.id) return;
+    try { const saved = localStorage.getItem('fooddash_admin_tab:' + me.id); setTab(saved || 'dash'); } catch { setTab('dash'); }
+    setTabOwner(me.id);
+  }, [me?.id]);
+  useEffect(() => {
+    if (!me?.id || tabOwner !== me.id) return;
+    try { localStorage.setItem('fooddash_admin_tab:' + me.id, tab); } catch {}
+  }, [me?.id, tab, tabOwner]);
   if (!me) return <div className="adm"><div className="skel mt" /></div>;
   const F = k => e => setForm({ ...form, [k]: e.target.value });
   const fl = of === 'all' ? orders || [] : of === 'active' ? (orders || []).filter(isActive) : (orders || []).filter(o => o.status === of);

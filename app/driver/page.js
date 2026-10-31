@@ -7,7 +7,7 @@ const NEXT = { DRIVER_ASSIGNED: ['ON_DELIVERY', 'Mulai antar', 'Pesanan diantar,
 
 export default function Driver() {
   const { me, reload } = useGuard('driver'); const { orders, act } = useOrders(me);
-  const [tab, setTab] = useState('offers'); const [chat, setChat] = useState(null); const [det, setDet] = useState(null); const [oh, setOh] = useState('active'); const [share, setShare] = useState(true); const [busyOrder, setBusyOrder] = useState(null);
+  const [tab, setTab] = useState('offers'); const [tabOwner, setTabOwner] = useState(null); const [chat, setChat] = useState(null); const [det, setDet] = useState(null); const [oh, setOh] = useState('active'); const [share, setShare] = useState(true); const [busyOrder, setBusyOrder] = useState(null);
   const pf = useProfiles((orders || []).map(o => o.customer_id));
   const mine = (orders || []).filter(o => me && o.driver_id === me.id); const cm = useChatMeta(me, mine, chat?.id);
   const live = mine.filter(o => ['DRIVER_ASSIGNED', 'ON_DELIVERY'].includes(o.status)); const liveKey = live.map(o => o.id + o.status).join(',');
@@ -20,8 +20,16 @@ export default function Driver() {
     }, e => toast(e.code === 1 ? 'Izin lokasi ditolak. Aktifkan lokasi agar customer bisa melacakmu.' : 'Lokasi tidak tersedia', 'err'), { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 });
     return () => navigator.geolocation.clearWatch(wid);
   }, [me?.id, share, liveKey]);
-  useEffect(() => { try { const saved = localStorage.getItem('fooddash_driver_tab'); if (saved) setTab(saved); } catch {} }, []);
-  useEffect(() => { try { localStorage.setItem('fooddash_driver_tab', tab) } catch {} }, [tab]);
+  // Preferensi tab disimpan terpisah untuk setiap akun Supabase, bukan global per perangkat/role.
+  useEffect(() => {
+    if (!me?.id) return;
+    try { const saved = localStorage.getItem('fooddash_driver_tab:' + me.id); setTab(saved || 'offers'); } catch { setTab('offers'); }
+    setTabOwner(me.id);
+  }, [me?.id]);
+  useEffect(() => {
+    if (!me?.id || tabOwner !== me.id) return;
+    try { localStorage.setItem('fooddash_driver_tab:' + me.id, tab); } catch {}
+  }, [me?.id, tab, tabOwner]);
   if (!me) return <div className="phone"><div className="skel mt" /></div>;
   const go = async (o, s, msg) => {
     if (busyOrder) return;
