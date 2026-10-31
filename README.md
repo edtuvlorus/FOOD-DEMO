@@ -94,3 +94,10 @@ Status dipantau lewat realtime/polling pada customer, admin, dan driver. Tab das
 - Different accounts on the same browser no longer share the last-opened tab.
 - On refresh, the app waits until the authenticated profile is loaded, then restores that account's own tab. A new account starts at its role's default tab.
 - Route access remains role-guarded: admin -> `/admin`, driver -> `/driver`, customer -> `/customer`; logging in redirects according to the role stored in `profiles`.
+
+
+## v15 — Isolasi sesi login per tab
+- Sesi Supabase kini disimpan di `sessionStorage`, bukan `localStorage` bersama.
+- Akun yang login di tab berbeda tidak saling mengganti sesi. Refresh pada tab yang sama tetap mempertahankan akun dan halaman/tab terakhir.
+- Untuk simulasi beberapa pengguna sekaligus, buka setiap akun di tab/jendela browser terpisah dan login masing-masing. Jangan gunakan tab duplikat yang menyalin sesi awal; buka tab baru kosong atau gunakan profil browser berbeda.
+- Tidak membutuhkan perubahan SQL Supabase.
