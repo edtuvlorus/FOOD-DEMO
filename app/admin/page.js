@@ -1,5 +1,5 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { sb, rp, toast, uploadImage, STATUS, PAYLABEL, isActive, useGuard, useOrders, useList, useSettings, useProfiles, useStore, getPos, hasPt } from '../../lib/sb';
 import { Icon, Sheet, Empty, ProfileView, Avatar } from '../../lib/ui';
@@ -20,7 +20,7 @@ export default function Admin() {
   const { me, reload } = useGuard('admin'); const { orders, act, load: loadOrders } = useOrders(me); const r = useRouter();
   const [menu, loadMenu] = useList('menu_items', 'name', me); const [cats, loadCats] = useList('categories', 'sort', me); const [banners, loadBan] = useList('banners', 'sort', me); const [st, loadSt] = useSettings(me); const [store, loadStore] = useStore(me); const [sto, setSto] = useState(null);
   const [payments, loadPayments] = useList('payment_methods', 'sort', me); const [payForm, setPayForm] = useState(null);
-  const [tab, setTab] = useState('dash'); const [per, setPer] = useState('day'); const [of, setOf] = useState('all'); const [form, setForm] = useState(null); const [catName, setCatName] = useState(''); const [bform, setBform] = useState(null); const [ship, setShip] = useState(null); const [busy, setBusy] = useState(false);
+  const [tab, setTab] = useState(() => typeof window !== 'undefined' ? localStorage.getItem('fooddash_admin_tab') || 'dash' : 'dash'); const [proofModal, setProofModal] = useState(null); const [per, setPer] = useState('day'); const [of, setOf] = useState('all'); const [form, setForm] = useState(null); const [catName, setCatName] = useState(''); const [bform, setBform] = useState(null); const [ship, setShip] = useState(null); const [busy, setBusy] = useState(false);
   const pf = useProfiles((orders || []).flatMap(o => [o.customer_id, o.driver_id]));
   const ok = (orders || []).filter(o => o.status !== 'CANCELLED'), done = ok.filter(o => o.status === 'DELIVERED');
   const bks = useMemo(() => { const b = buckets(per), m = Object.fromEntries(b.map(x => [x.key, 0])); done.forEach(o => { const k = bucket(o.created_at, per); if (k in m) m[k] += Number(o.total) }); return b.map(x => ({ ...x, v: m[x.key] })) }, [orders, per]);
@@ -55,6 +55,7 @@ export default function Admin() {
   const toggleBan = async b => { await sb.from('banners').update({ active: !b.active }).eq('id', b.id); loadBan() };
 
   const tabs = [['dash', 'Omzet', 'chart'], ['orders', 'Pesanan', 'orders'], ['payments', 'Pembayaran', 'wallet'], ['prod', 'Produk', 'box'], ['cat', 'Kategori', 'tag'], ['ship', 'Toko, Ongkir & Banner', 'truck'], ['me', 'Profil', 'user']];
+  useEffect(() => { try { localStorage.setItem('fooddash_admin_tab', tab) } catch {} }, [tab]);
   const F = k => e => setForm({ ...form, [k]: e.target.value });
   const fl = of === 'all' ? orders || [] : of === 'active' ? (orders || []).filter(isActive) : (orders || []).filter(o => o.status === of);
   const sh = ship || st;
@@ -74,7 +75,7 @@ export default function Admin() {
         <div className="row sp"><b>#{o.id.slice(0, 6)}</b><span className={'tag ' + (o.status === 'DELIVERED' ? 'ok' : o.status === 'CANCELLED' ? 'bad' : '')}>{STATUS[o.status]}</span></div>
         <div className="row mt"><Avatar p={pf[o.customer_id]} s={30} /><small>{nm(o.customer_id)}{o.driver_id && <> · driver: <b>{nm(o.driver_id)}</b></>}</small></div>
         <small style={{ display: 'block', margin: '8px 0' }}>{o.items.map(i => i.qty + '× ' + i.name).join(', ')}</small><small>{o.address} · {o.distance_km} km · {o.payment_method_name || PAYLABEL[o.payment_method] || o.payment_method}</small>
-        {o.payment_proof_url && <a href={o.payment_proof_url} target="_blank" rel="noreferrer" style={{display:'inline-flex',alignItems:'center',gap:8,marginTop:8}}><img src={o.payment_proof_url} alt="Bukti pembayaran" style={{width:64,height:64,objectFit:'cover',borderRadius:10}}/><span className="sm ghost">Lihat bukti pembayaran</span></a>}
+        {o.payment_proof_url && <button className="sm ghost" style={{marginTop:8}} onClick={() => setProofModal(o)}><span className="row"><Icon n="file" s={14}/>Lihat bukti pembayaran</span></button>}
         <div className="row sp mt"><b className="o">{rp(o.total)}</b><small>{new Date(o.created_at).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' })}</small></div>
         <div className="row wrap mt">
           {o.status === 'PENDING' && <button className="sm" onClick={() => act(o.id, 'PREPARING', 'Pesanan dikonfirmasi dan mulai disiapkan')}>Konfirmasi pesanan</button>}
@@ -129,5 +130,6 @@ export default function Admin() {
       <button className="full mt" disabled={busy} onClick={saveProd}>Simpan produk</button></Sheet>}
     {bform && <Sheet wide onClose={() => setBform(null)}><h3>Banner baru</h3><input placeholder="Judul" value={bform.title || ''} onChange={e => setBform({ ...bform, title: e.target.value })} /><input placeholder="Teks kecil" value={bform.subtitle || ''} onChange={e => setBform({ ...bform, subtitle: e.target.value })} />
       <div className="row"><div className="thumb">{bform.image_url ? <img src={bform.image_url} alt="" /> : <Icon n="image" />}</div><label><span style={{ color: 'var(--o)', fontWeight: 600, cursor: 'pointer' }}>Upload gambar</span><input type="file" accept="image/*" hidden onChange={upl('banners', u => setBform(f => ({ ...f, image_url: u })))} /></label></div><button className="full mt" disabled={busy} onClick={saveBan}>Simpan banner</button></Sheet>}
-  </div>;
+
+    {proofModal && <Sheet full onClose={() => setProofModal(null)}><div className="top"><h2>Bukti pembayaran</h2><button className="icon" onClick={() => setProofModal(null)}><Icon n="back"/></button></div><div className="card"><b>Pesanan #{proofModal.id.slice(0,6)}</b><p><small>{proofModal.payment_method_name || proofModal.payment_method}</small></p><img src={proofModal.payment_proof_url} alt="Bukti pembayaran" style={{width:'100%',maxHeight:'70vh',objectFit:'contain',borderRadius:12,background:'#f5f5f5'}}/></div></Sheet>}  </div>;
 }

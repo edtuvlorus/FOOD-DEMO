@@ -1,13 +1,13 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { sb, rp, toast, STATUS, PAYLABEL, isActive, getPos, hasPt, useGuard, useOrders, useProfiles, useChatMeta } from '../../lib/sb';
+import { sb, rp, toast, STATUS, PAYLABEL, isActive, hasPt, useGuard, useOrders, useProfiles, useChatMeta } from '../../lib/sb';
 import { Icon, Avatar, Chat, ProfileView, Empty, BottomNav, Steps, Sheet } from '../../lib/ui';
 
 const NEXT = { DRIVER_ASSIGNED: ['ON_DELIVERY', 'Mulai antar', 'Pesanan diantar, lokasimu dibagikan ke customer'], ON_DELIVERY: ['DELIVERED', 'Selesai diantar', 'Pesanan selesai. Terima kasih!'] };
 
 export default function Driver() {
   const { me, reload } = useGuard('driver'); const { orders, act } = useOrders(me);
-  const [tab, setTab] = useState('offers'); const [chat, setChat] = useState(null); const [det, setDet] = useState(null); const [oh, setOh] = useState('active'); const [share, setShare] = useState(true);
+  const [tab, setTab] = useState(() => typeof window !== 'undefined' ? localStorage.getItem('fooddash_driver_tab') || 'offers' : 'offers'); const [chat, setChat] = useState(null); const [det, setDet] = useState(null); const [oh, setOh] = useState('active'); const [share, setShare] = useState(true); const [busyOrder, setBusyOrder] = useState(null);
   const pf = useProfiles((orders || []).map(o => o.customer_id));
   const mine = (orders || []).filter(o => me && o.driver_id === me.id); const cm = useChatMeta(me, mine, chat?.id);
   const live = mine.filter(o => ['DRIVER_ASSIGNED', 'ON_DELIVERY'].includes(o.status)); const liveKey = live.map(o => o.id + o.status).join(',');
@@ -20,8 +20,19 @@ export default function Driver() {
     }, e => toast(e.code === 1 ? 'Izin lokasi ditolak. Aktifkan lokasi agar customer bisa melacakmu.' : 'Lokasi tidak tersedia', 'err'), { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 });
     return () => navigator.geolocation.clearWatch(wid);
   }, [me?.id, share, liveKey]);
+  useEffect(() => { try { localStorage.setItem('fooddash_driver_tab', tab) } catch {} }, [tab]);
   if (!me) return <div className="phone"><div className="skel mt" /></div>;
-  const go = async (o, s, msg) => { if (share) { try { await getPos() } catch (e) { toast(e.message, 'err') } } act(o.id, s, msg) };
+  const go = async (o, s, msg) => {
+    if (busyOrder) return;
+    setBusyOrder(o.id);
+    try {
+      // Lokasi dibagikan oleh watchPosition; aksi status tidak boleh gagal hanya
+      // karena izin GPS belum diberikan.
+      await act(o.id, s, msg);
+    } finally {
+      setBusyOrder(null);
+    }
+  };
   const offers = (orders || []).filter(o => o.status === 'READY_FOR_PICKUP' && !o.driver_id);
   const shown = mine.filter(o => oh === 'active' ? isActive(o) : !isActive(o)); const earn = mine.filter(o => o.status === 'DELIVERED').reduce((s, o) => s + Number(o.delivery_fee), 0);
   const nav = [['offers', 'Order masuk', 'bike'], ['mine', 'Pesanan', 'orders'], ['chat', 'Pesan', 'chat'], ['profile', 'Profil', 'user']];
@@ -32,8 +43,8 @@ export default function Driver() {
     <div className="row mt"><Icon n="pin" s={15} /><small>{o.address} · {o.distance_km} km</small></div>
     <div className="row sp mt"><span>Ongkir <b className="o">{rp(o.delivery_fee)}</b></span><small>{o.payment_method_name || PAYLABEL[o.payment_method] || o.payment_method} · {rp(o.total)}</small></div>
     <div className="row wrap mt">
-      {offer && <button className="grow" onClick={() => go(o, 'DRIVER_ASSIGNED', 'Pesanan kamu! Segera menuju toko')}>Ambil order</button>}
-      {!offer && NEXT[o.status] && <button className="grow" onClick={() => go(o, NEXT[o.status][0], NEXT[o.status][2])}>{NEXT[o.status][1]}</button>}
+       {offer && <button className="grow" disabled={busyOrder === o.id} onClick={() => go(o, 'DRIVER_ASSIGNED', 'Pesanan berhasil diambil. Segera menuju toko')}>{busyOrder === o.id ? 'Memproses...' : 'Ambil order'}</button>}
+      {!offer && NEXT[o.status] && <button className="grow" disabled={busyOrder === o.id} onClick={() => go(o, NEXT[o.status][0], NEXT[o.status][2])}>{busyOrder === o.id ? 'Memproses...' : NEXT[o.status][1]}</button>}
       {!offer && <button className="ghost" onClick={() => setChat(o)}><span className="row"><Icon n="chat" s={16} />Chat customer{cm.unread[o.id] > 0 ? ` (${cm.unread[o.id]})` : ''}</span></button>}
       {!offer && <button className="soft" onClick={() => setDet(o)}>Detail</button>}</div></div> };
   return <div className="phone">

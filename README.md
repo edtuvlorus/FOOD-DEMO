@@ -47,3 +47,44 @@ Alamat teks saja belum cukup untuk perhitungan ongkir; aplikasi juga memerlukan 
 4. Tes cancel pesanan aktif dan pastikan stok kembali.
 
 Catatan: pesanan `DELIVERED` tidak bisa dibatalkan, tetapi kartu pesanan tetap dapat dihapus admin.
+
+
+## Revisi berulang & status driver (v9)
+
+Jalankan `supabase/schema_v9.sql` **setelah schema_v8.sql** melalui Supabase SQL Editor menggunakan role database yang berwenang (`postgres`), bukan role `authenticated`.
+
+Perbaikan:
+- Customer dapat membuat banyak pesanan selama masih memiliki stok; tidak ada batas satu pesanan per akun.
+- Pemeriksaan role pesanan membaca profil akun yang sedang login dan memberikan pesan error yang lebih jelas jika profil/role tidak cocok.
+- Admin dapat mengonfirmasi `PENDING → PREPARING` lalu `PREPARING → READY_FOR_PICKUP` untuk setiap order.
+- Driver dapat mengambil order yang belum diambil, lalu memperbarui `DRIVER_ASSIGNED → ON_DELIVERY → DELIVERED`.
+- Tombol driver menunggu hasil RPC, menampilkan status proses, dan memuat ulang daftar setelah berhasil/gagal.
+- Sesi Supabase tetap disimpan di browser dan token dipantau otomatis; tidak perlu login ulang setiap berpindah tab/halaman. Tombol Keluar tetap mengakhiri sesi.
+
+### Jika muncul "Hanya customer yang dapat membuat pesanan"
+Periksa `profiles` untuk akun customer yang sedang login. Baris profil harus memiliki `id` sama dengan `auth.users.id` dan `role = 'customer'`. Jangan ubah role admin/driver menjadi customer.
+
+### Uji setelah migrasi
+1. Login sebagai customer, buat dua order berbeda tanpa logout.
+2. Login sebagai admin, konfirmasi order pertama dan kedua hingga status `READY_FOR_PICKUP`.
+3. Login sebagai driver, ambil order pertama; tombol harus berubah ke **Mulai antar** lalu **Selesai diantar**.
+4. Ambil order kedua dan ulangi alurnya. Order yang sudah diambil driver lain tidak bisa diambil lagi.
+5. Refresh browser; sesi tetap aktif selama belum menekan **Keluar** dan token/session Supabase masih valid.
+
+## Upload bukti pembayaran gagal RLS (v10)
+
+Jika upload menampilkan `new row violates row-level security policy`, jalankan `supabase/schema_v10.sql` di Supabase SQL Editor **setelah schema_v9.sql**. Jalankan dengan role database yang berwenang (umumnya `postgres`), bukan `authenticated`.
+
+Policy v10 membolehkan pengguna yang sudah login mengunggah hanya ke `media/payment-proofs/<ID-user-auth>/...`. Path upload di frontend sudah menggunakan format tersebut. Policy tidak mengizinkan pengguna mengunggah ke folder bukti milik pengguna lain.
+
+Setelah migrasi, deploy source code v10 dan coba upload bukti lagi. Jika tetap gagal, cek bahwa akun customer punya sesi login aktif dan bucket `media` tersedia.
+
+## Revisi v11 — Alur pesanan stabil
+Jalankan `supabase/schema_v11.sql` setelah schema sebelumnya. Alur final:
+1. Customer pesan + bayar/upload bukti (jika non-COD) → `PENDING`.
+2. Admin konfirmasi → `PREPARING`; admin siap pickup → `READY_FOR_PICKUP`.
+3. Driver mengambil order → `DRIVER_ASSIGNED`.
+4. Driver mulai antar → `ON_DELIVERY`.
+5. Driver menyelesaikan → `DELIVERED`.
+
+Status dipantau lewat realtime/polling pada customer, admin, dan driver. Tab dashboard juga disimpan di browser agar refresh tidak kembali ke halaman awal. Admin dapat membuka bukti pembayaran dalam popup.
